@@ -1,0 +1,110 @@
+---
+title: "Machine Learning Project"
+output: html_document
+---
+## Project Requirement
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## Goal
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## 1.0 loading library
+
+```{r include = FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(knitr)
+```
+
+## 2.0 Reading downloaded files
+```{r}
+training <- read.csv("C:\\Users\\Kin\\Desktop\\R files\\Machine learning\\Project\\pml-training.csv",header = TRUE)
+
+testing <- read.csv("C:\\Users\\Kin\\Desktop\\R files\\Machine learning\\Project\\pml-testing.csv",header = TRUE)
+```
+
+
+## 3.0 Preposessing
+First we clean the training data.  
+```{r}
+# Making the training data into a data frame.
+training<-as.data.frame(training)
+
+# Remove columns with more than 90% of the entries are "NA". 
+training<-training[ , colMeans(is.na(training)) <0.9]
+
+# Remove columns with NearZeroVariance variables
+nzv <- nearZeroVar(training, saveMetrics=TRUE)
+training <- training[,nzv$nzv==FALSE]
+
+# Remove the first 5 columns which are time stamps and unlikely to be predictors 
+training <- training[,-c(1:5)]
+```
+## 4.0 Creating training and test set for cross validation
+We subdivide the training data into training and testing data set.
+```{r}
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+sub_Training <- training[inTrain, ]
+sub_Testing <- training[-inTrain, ]
+dim(sub_Training); dim(sub_Testing)
+```
+
+## Fitting Decision Tree
+```{r}
+set.seed(12345)
+modFit_rpart <- rpart(classe ~ ., data=sub_Training, method="class")
+fancyRpartPlot(modFit_rpart)
+
+pred_rpart <- predict(modFit_rpart, sub_Testing, type = "class")
+Conf_mat_rpart <- confusionMatrix(pred_rpart, sub_Testing$classe)
+Conf_mat_rpart
+```
+## Fitting Randon Forest
+```{r}
+set.seed(12345)
+modFit_RF <- randomForest(classe ~ ., data=sub_Training)
+pred_RF <- predict(modFit_RF, sub_Testing, type = "class")
+Conf_mat_RF <- confusionMatrix(pred_RF, sub_Testing$classe)
+Conf_mat_RF
+```
+
+## Fitting Generalised Boosting bt tree
+
+```{r}
+set.seed(12345)
+fitControl <- trainControl(method = "repeatedcv",number = 5,repeats = 1)
+modFit_gbm <- train(classe ~ ., data=sub_Training, method = "gbm",trControl = fitControl,verbose = FALSE)
+pred_gbm <- predict(modFit_gbm, newdata=sub_Testing)
+Conf_mat_gbm  <- confusionMatrix(pred_gbm, sub_Testing$classe)
+Conf_mat_gbm 
+```
+
+## Predicting Results on the Test Data
+Random Forests gave better Accuracy (99.8%) than Decision Tree (73.46%) and GBM(98.8%) in the sub_Testing dataset.We therefore use it to predict the outcome variable classe for the testing set.
+The test prediction is then saved as a data file.
+```{r}
+pred_Test <- predict(modFit_RF, testing, type = "class")
+pred_Test
+pred_Test<-as.data.frame(pred_Test)
+
+pred_Test<-cbind(1:dim(testing)[1],pred_Test)
+colnames(pred_Test)<-c("Test_record","prediction")
+write.table(pred_Test,file="C:\\Users\\Kin\\Desktop\\R files\\Machine learning\\Project\\Test_prediction.txt",row.names = F)
+
+```
+
+
